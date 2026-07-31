@@ -23,11 +23,19 @@ const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
  *   collaborator/client view, which should only see project spend, not revenue).
  */
 export function FinancialCharts({ hideIncome = false }: { hideIncome?: boolean }) {
-  const { transactions } = useData();
+  const { transactions, workers } = useData();
   const { currencySymbol } = useSettings();
 
   // Monthly income vs expense, derived from the transaction ledger.
   const byMonth = new Map<string, { income: number; expense: number }>();
+  const addExpenseMonth = (dateStr: string, amount: number) => {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+    const entry = byMonth.get(key) ?? { income: 0, expense: 0 };
+    entry.expense += amount;
+    byMonth.set(key, entry);
+  };
   for (const tx of transactions) {
     const d = new Date(tx.date);
     if (Number.isNaN(d.getTime())) continue;
@@ -37,15 +45,24 @@ export function FinancialCharts({ hideIncome = false }: { hideIncome?: boolean }
     else entry.expense += tx.amount;
     byMonth.set(key, entry);
   }
+  // Worker wage payouts are expenses tracked outside the ledger.
+  for (const w of workers) {
+    for (const p of w.payments ?? []) addExpenseMonth(p.date, p.amount);
+  }
   const monthlyCashFlow = Array.from(byMonth.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, val]) => ({ month: MONTH_LABELS[Number(key.split("-")[1])] ?? key, ...val }));
 
-  // Expense breakdown by category (non-income transactions).
+  // Expense breakdown by category (non-income transactions + worker wages).
   const byCategory = new Map<string, number>();
   for (const tx of transactions) {
     if (tx.type === "income") continue;
     byCategory.set(tx.category, (byCategory.get(tx.category) ?? 0) + tx.amount);
+  }
+  const totalLabor = workers.reduce((acc, w) => acc + (w.totalPaidOut ?? 0), 0);
+  if (totalLabor > 0) {
+    const key = "Labor / Wages";
+    byCategory.set(key, (byCategory.get(key) ?? 0) + totalLabor);
   }
   const categoryExpenses = Array.from(byCategory.entries())
     .map(([category, amount]) => ({ category, amount }))

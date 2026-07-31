@@ -24,11 +24,12 @@ import {
   ArrowRight,
   ShieldCheck,
   FolderOpen,
+  Hammer,
 } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const { projects, transactions } = useData();
+  const { projects, transactions, workers } = useData();
   const { workspaceMode } = useGoogleAuth();
   const { formatCurrency } = useSettings();
   const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
@@ -41,8 +42,23 @@ export default function DashboardPage() {
 
   // Compute stat card metrics
   const totalIncome = transactions.filter((t) => t.type === "income").reduce((acc, t) => acc + t.amount, 0);
-  const totalExpense = transactions.filter((t) => t.type !== "income").reduce((acc, t) => acc + t.amount, 0);
+  const ledgerExpense = transactions.filter((t) => t.type !== "income").reduce((acc, t) => acc + t.amount, 0);
+  // Worker wages are recorded outside the transaction ledger, so add them in
+  // explicitly to get a true total outflow and net profit.
+  const totalLabor = workers.reduce((acc, w) => acc + (w.totalPaidOut ?? 0), 0);
+  const totalExpense = ledgerExpense + totalLabor;
   const netProfit = totalIncome - totalExpense;
+
+  // Wages paid grouped by project, for the labor & wages section.
+  const laborByProject = projects
+    .map((p) => ({
+      project: p,
+      labor: workers
+        .filter((w) => w.projectId === p.id)
+        .reduce((acc, w) => acc + (w.totalPaidOut ?? 0), 0),
+    }))
+    .filter((row) => row.labor > 0)
+    .sort((a, b) => b.labor - a.labor);
 
   return (
     <div className="space-y-8 animate-in fade-in-50">
@@ -112,10 +128,19 @@ export default function DashboardPage() {
           value={formatCurrency(totalExpense)}
           change="-3.8%"
           isPositive={false}
-          subtitle="Materials, labor & sub-contractors"
+          subtitle="Ledger expenses + worker wages"
           icon={Receipt}
           iconBgColor="bg-red-500/10"
           iconTextColor="text-red-500"
+        />
+
+        <StatCard
+          title="Labor / Wages Paid"
+          value={formatCurrency(totalLabor)}
+          subtitle="Total wages paid to site workers"
+          icon={Hammer}
+          iconBgColor="bg-amber-500/10"
+          iconTextColor="text-amber-500"
         />
 
         <StatCard
@@ -123,24 +148,62 @@ export default function DashboardPage() {
           value={formatCurrency(netProfit)}
           change="+22.5%"
           isPositive={true}
-          subtitle="Gross profit before retainage"
+          subtitle="Revenue − expenses − wages"
           icon={TrendingUp}
           iconBgColor="bg-amber-500/10"
           iconTextColor="text-amber-500"
-        />
-
-        <StatCard
-          title="Active Construction Sites"
-          value={`${projects.filter((p) => p.status === "running").length} Running`}
-          subtitle="All projects stored in Google Drive"
-          icon={Building2}
-          iconBgColor="bg-blue-500/10"
-          iconTextColor="text-blue-500"
         />
       </div>
 
       {/* Visual Analytics Section */}
       <FinancialCharts />
+
+      {/* Labor & Wages Section */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <div>
+            <CardTitle className="text-base flex items-center">
+              <Hammer className="h-4 w-4 mr-1.5 text-amber-500" />
+              Labor & Wages
+            </CardTitle>
+            <CardDescription>Wages paid to site workers, by project</CardDescription>
+          </div>
+          <Link href="/workers" className="text-xs text-amber-500 hover:underline flex items-center">
+            <span>Manage Workers</span>
+            <ArrowRight className="h-3 w-3 ml-1" />
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {laborByProject.length === 0 ? (
+            <p className="text-xs text-zinc-400 py-4 text-center">
+              No wages paid to workers yet.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {laborByProject.map(({ project, labor }) => {
+                const laborPercent = totalLabor > 0 ? Math.round((labor / totalLabor) * 100) : 0;
+                return (
+                  <div key={project.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[220px]">
+                        {project.name}
+                      </span>
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        {formatCurrency(labor)}
+                      </span>
+                    </div>
+                    <Progress value={laborPercent} indicatorColor="bg-amber-500" />
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-zinc-200 dark:border-zinc-800 text-sm font-bold text-zinc-900 dark:text-zinc-50">
+                <span>Total Wages Paid</span>
+                <span className="text-amber-500">{formatCurrency(totalLabor)}</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Content Grid: Active Projects Progress & Recent Transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

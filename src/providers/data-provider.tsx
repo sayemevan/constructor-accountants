@@ -416,6 +416,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await GoogleSheetsService.updateRow(ref.spreadsheetId, workerSchema, ref.rowIndex, updatedWorker);
       }
       setWorkers((prev) => prev.map((w) => (w.id === worker.id ? updatedWorker : w)));
+
+      // A wage payout is a labor expense, so keep the project's derived figures
+      // in sync immediately (labor cost, total expense and profit) without
+      // waiting for a full reload.
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.id !== worker.projectId) return p;
+          const laborCost = p.laborCost + payment.amount;
+          const totalExpense = p.totalExpense + payment.amount;
+          return {
+            ...p,
+            laborCost,
+            totalExpense,
+            currentProfit: p.amountReceived - totalExpense,
+          };
+        })
+      );
       markSynced();
       return updatedWorker;
     },

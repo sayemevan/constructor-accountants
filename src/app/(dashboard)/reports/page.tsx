@@ -11,7 +11,7 @@ import { useSettings } from "@/providers/settings-provider";
 import { FileSpreadsheet, Printer, Calendar } from "lucide-react";
 
 export default function ReportsPage() {
-  const { transactions } = useData();
+  const { transactions, workers } = useData();
   const { workspaceMode } = useGoogleAuth();
   const isCollaborator = workspaceMode === "collaborator";
   const { formatCurrency } = useSettings();
@@ -21,6 +21,13 @@ export default function ReportsPage() {
   for (const tx of transactions) {
     if (tx.type === "income") continue;
     expenseByCategory.set(tx.category, (expenseByCategory.get(tx.category) ?? 0) + tx.amount);
+  }
+  // Worker wages live outside the transaction ledger, so fold them into the
+  // cost breakdown as their own line item.
+  const totalLabor = workers.reduce((acc, w) => acc + (w.totalPaidOut ?? 0), 0);
+  if (totalLabor > 0) {
+    const key = "Labor / Wages (Site Workers)";
+    expenseByCategory.set(key, (expenseByCategory.get(key) ?? 0) + totalLabor);
   }
   const totalExpense = Array.from(expenseByCategory.values()).reduce((a, v) => a + v, 0);
   const netProfit = revenue - totalExpense;
