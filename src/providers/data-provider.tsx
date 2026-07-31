@@ -6,6 +6,7 @@ import { GoogleSheetsService } from "@/services/google-sheets.service";
 import { GoogleDriveService } from "@/services/google-drive.service";
 import {
   accountSchema,
+  defaultAccounts,
   materialSchema,
   memberSchema,
   projectSchema,
@@ -167,6 +168,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Where each record lives, so mutations can target the exact sheet + row.
   const [projectRows, setProjectRows] = useState<RowRefMap>({});
   const [workerRows, setWorkerRows] = useState<RowRefMap>({});
+  const [accountRows, setAccountRows] = useState<RowRefMap>({});
 
   /** Finds a project's own spreadsheet id, throwing a friendly error if missing. */
   const projectSheetId = useCallback(
@@ -204,9 +206,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       withDerivedFinancials(p, workers, transactions)
     );
 
+    // Backfill the basic accounts (Cash, Bank, etc.) for workspaces created
+    // before seeding existed, so there's always something to transact against.
+    let accountItems = accRes.items;
+    const nextAccountRows: RowRefMap = {};
+    for (const [id, rowIndex] of Object.entries(accRes.rowIndexById)) {
+      nextAccountRows[id] = { spreadsheetId, rowIndex };
+    }
+    if (accountItems.length === 0) {
+      const seeds = defaultAccounts();
+      for (const acc of seeds) {
+        const rowIndex = await GoogleSheetsService.appendRow(spreadsheetId, accountSchema, acc);
+        nextAccountRows[acc.id] = { spreadsheetId, rowIndex };
+      }
+      accountItems = seeds;
+    }
+
     setProjects(derivedProjects);
     setProjectRows(nextProjectRows);
-    setAccounts(accRes.items);
+    setAccounts(accountItems);
+    setAccountRows(nextAccountRows);
     setWorkers(workers);
     setWorkerRows(workerRows);
     setTransactions(transactions);
@@ -274,6 +293,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setProjects(derivedProjects);
     setProjectRows({});
     setAccounts([]);
+    setAccountRows({});
     setWorkers(workers);
     setWorkerRows(workerRows);
     setTransactions(transactions);
@@ -398,11 +418,41 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [workerRows, markSynced]
   );
 
+  /**
+   * Applies a signed delta to a payment account's running balance and persists
+   * it to the master ledger. Positive = money in (income), negative = money out
+   * (expense / wage payout). Matched by account name; a no-op when the name is
+   * blank or unknown (e.g. collaborators, who don't hold workspace accounts).
+   */
+  const adjustAccountBalance = useCallback(
+    async (accountName: string, delta: number) => {
+      if (!accountName || !delta) return;
+      const account = accounts.find((a) => a.name === accountName);
+      if (!account) return;
+      const updated: Account = {
+        ...account,
+        balance: account.balance + delta,
+        lastSynced: new Date().toISOString(),
+      };
+      const ref = accountRows[account.id];
+      if (ref) {
+        await GoogleSheetsService.updateRow(ref.spreadsheetId, accountSchema, ref.rowIndex, updated);
+      }
+      setAccounts((prev) => prev.map((a) => (a.id === account.id ? updated : a)));
+    },
+    [accounts, accountRows]
+  );
+
   const recordWorkerPayment = useCallback(
     async (worker: SiteWorker, payment: WorkerPayment): Promise<SiteWorker> => {
       const ref = workerRows[worker.id];
       const sheetId = ref?.spreadsheetId ?? projectSheetId(worker.projectId);
       await GoogleSheetsService.appendRow(sheetId, workerPaymentSchema, payment);
+
+      // A wage payout is cash leaving the chosen account.
+      if (payment.accountName) {
+        await adjustAccountBalance(payment.accountName, -payment.amount);
+      }
 
       const payments = [payment, ...(worker.payments ?? [])];
       const updatedWorker: SiteWorker = {
@@ -436,7 +486,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       markSynced();
       return updatedWorker;
     },
-    [workerRows, projectSheetId, markSynced]
+    [workerRows, projectSheetId, markSynced, adjustAccountBalance]
   );
 
   const addTransaction = useCallback(
@@ -444,6 +494,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const sheetId = projectSheetId(transaction.projectId);
       await GoogleSheetsService.appendRow(sheetId, transactionSchema, transaction);
       setTransactions((prev) => [transaction, ...prev]);
+      // Money in (income) grows the account; anything else (expense, material,
+      // subcontractor payout) draws it down.
+      const isIncomeTx = transaction.type === "income";
+      await adjustAccountBalance(
+        transaction.accountName,
+        isIncomeTx ? transaction.amount : -transaction.amount
+      );
       // Keep the affected project's derived figures in sync immediately so the
       // UI reflects the new payment/expense without waiting for a full reload.
       setProjects((prev) =>
@@ -464,7 +521,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       );
       markSynced();
     },
-    [projectSheetId, markSynced]
+    [projectSheetId, markSynced, adjustAccountBalance]
   );
 
   const addMaterial = useCallback(
@@ -480,8 +537,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addAccount = useCallback(
     async (account: Account) => {
       if (!spreadsheetId) throw new Error("No workspace connected");
-      await GoogleSheetsService.appendRow(spreadsheetId, accountSchema, account);
+      const rowIndex = await GoogleSheetsService.appendRow(spreadsheetId, accountSchema, account);
       setAccounts((prev) => [account, ...prev]);
+      setAccountRows((prev) => ({ ...prev, [account.id]: { spreadsheetId, rowIndex } }));
       markSynced();
     },
     [spreadsheetId, markSynced]

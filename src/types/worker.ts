@@ -19,6 +19,8 @@ export interface WorkerPayment {
   paymentMethod: "Cash" | "Bank Transfer" | "Check";
   transactionNo: string;
   notes?: string;
+  /** Payment account the wage was paid from; its balance is reduced by this payout. */
+  accountName?: string;
 }
 
 export interface SiteWorker {

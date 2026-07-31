@@ -1,7 +1,9 @@
 import { googleFetch, SHEETS_API } from "@/lib/google/api-client";
 import { ConstructionProject } from "@/types/project";
 import {
+  accountSchema,
   DATA_TAB_HEADERS,
+  defaultAccounts,
   EntitySchema,
   MASTER_SPREADSHEET_NAME,
   PROJECT_DATA_TAB_HEADERS,
@@ -56,6 +58,12 @@ export class GoogleSheetsService {
         range: `${t.tab}!A1`,
         values: [t.headers],
       })),
+      // Seed the workspace with a few basic accounts (Cash, Bank, etc.) so
+      // transactions can be recorded against an account from day one.
+      {
+        range: `${TABS.accounts}!A2`,
+        values: defaultAccounts().map((a) => accountSchema.toRow(a)),
+      },
       {
         range: `${TABS.settings}!A1`,
         values: [

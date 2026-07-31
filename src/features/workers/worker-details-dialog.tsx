@@ -31,11 +31,12 @@ interface WorkerDetailsDialogProps {
 }
 
 export function WorkerDetailsDialog({ worker, open, onOpenChange, onWorkerUpdated }: WorkerDetailsDialogProps) {
-  const { updateWorker, recordWorkerPayment } = useData();
+  const { updateWorker, recordWorkerPayment, accounts } = useData();
   const { formatCurrency, currencySymbol } = useSettings();
   const [showPayoutForm, setShowPayoutForm] = useState(false);
   const [daysWorked, setDaysWorked] = useState(10);
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Bank Transfer" | "Check">("Bank Transfer");
+  const [accountName, setAccountName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   if (!worker) return null;
@@ -64,6 +65,7 @@ export function WorkerDetailsDialog({ worker, open, onOpenChange, onWorkerUpdate
       paymentMethod: paymentMethod,
       transactionNo: `TX-W-${Math.floor(100 + Math.random() * 900)}`,
       notes: `Payout for ${daysWorked} days worked at ${currencySymbol}${worker.dailyWage}/day`,
+      accountName: accountName || undefined,
     };
 
     setSubmitting(true);
@@ -184,6 +186,25 @@ export function WorkerDetailsDialog({ worker, open, onOpenChange, onWorkerUpdate
               </div>
             </div>
 
+            <div>
+              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 block mb-1">
+                Paid From Account
+              </label>
+              <select
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                className="w-full h-8 rounded-md border border-zinc-200 dark:border-zinc-800 bg-transparent px-2 text-xs"
+              >
+                <option value="">Select account (optional)...</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.name}>
+                    {a.name}
+                    {a.institution ? ` (${a.institution})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-center justify-between text-xs pt-1">
               <span className="text-zinc-500">Calculated Payout: <strong>{formatCurrency(daysWorked * worker.dailyWage)}</strong></span>
               <Button type="submit" size="sm" disabled={submitting} className="h-7 text-xs">
@@ -200,7 +221,10 @@ export function WorkerDetailsDialog({ worker, open, onOpenChange, onWorkerUpdate
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowPayoutForm(true)}
+              onClick={() => {
+                setAccountName(accounts[0]?.name ?? "");
+                setShowPayoutForm(true);
+              }}
               disabled={worker.status === "deactivated"}
               className="text-xs h-7"
             >

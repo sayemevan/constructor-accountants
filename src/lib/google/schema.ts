@@ -4,6 +4,7 @@ import { Transaction, TransactionType, TransactionCategory } from "@/types/trans
 import { MaterialItem } from "@/types/material";
 import { Account, AccountType } from "@/types/account";
 import { ProjectMember, ProjectRole, MemberStatus } from "@/types/member";
+import { DEFAULT_CURRENCY } from "@/lib/currencies";
 
 /** Master spreadsheet identity — used to detect an app-created workspace in Drive. */
 export const WORKSPACE_FOLDER_NAME = "Construction Keeper";
@@ -90,14 +91,14 @@ export const workerSchema: EntitySchema<Omit<SiteWorker, "payments">> = {
 
 export const workerPaymentSchema: EntitySchema<WorkerPayment> = {
   tab: TABS.workerPayments,
-  headers: ["id", "workerId", "date", "amount", "daysWorked", "paymentMethod", "transactionNo", "notes"],
+  headers: ["id", "workerId", "date", "amount", "daysWorked", "paymentMethod", "transactionNo", "notes", "accountName"],
   toRow: (p) => [
-    p.id, p.workerId, p.date, p.amount, p.daysWorked, p.paymentMethod, p.transactionNo, p.notes ?? "",
+    p.id, p.workerId, p.date, p.amount, p.daysWorked, p.paymentMethod, p.transactionNo, p.notes ?? "", p.accountName ?? "",
   ],
   fromRow: (r) => ({
     id: str(r[0]), workerId: str(r[1]), date: str(r[2]), amount: num(r[3]), daysWorked: num(r[4]),
     paymentMethod: (str(r[5]) || "Cash") as WorkerPayment["paymentMethod"], transactionNo: str(r[6]),
-    notes: str(r[7]) || undefined,
+    notes: str(r[7]) || undefined, accountName: str(r[8]) || undefined,
   }),
 };
 
@@ -146,10 +147,62 @@ export const accountSchema: EntitySchema<Account> = {
   ],
   fromRow: (r) => ({
     id: str(r[0]), name: str(r[1]), type: (str(r[2]) || "bank") as AccountType,
-    accountNumberMasked: str(r[3]), balance: num(r[4]), currency: str(r[5]) || "USD",
+    accountNumberMasked: str(r[3]), balance: num(r[4]), currency: str(r[5]) || DEFAULT_CURRENCY,
     institution: str(r[6]), lastSynced: str(r[7]),
   }),
 };
+
+/**
+ * Basic payment accounts every new workspace starts with, so a contractor can
+ * record income/expenses against Cash or Bank right away without first having
+ * to set anything up. Balances start at zero and grow/shrink as transactions
+ * and wage payouts are recorded against them.
+ */
+export function defaultAccounts(currency: string = DEFAULT_CURRENCY): Account[] {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: "acc_cash",
+      name: "Cash",
+      type: "cash_on_hand",
+      accountNumberMasked: "",
+      balance: 0,
+      currency,
+      institution: "Cash in hand",
+      lastSynced: now,
+    },
+    {
+      id: "acc_bank",
+      name: "Bank Account",
+      type: "bank",
+      accountNumberMasked: "",
+      balance: 0,
+      currency,
+      institution: "Bank",
+      lastSynced: now,
+    },
+    {
+      id: "acc_petty_cash",
+      name: "Petty Cash",
+      type: "petty_cash",
+      accountNumberMasked: "",
+      balance: 0,
+      currency,
+      institution: "Site petty cash",
+      lastSynced: now,
+    },
+    {
+      id: "acc_vendor_credit",
+      name: "Vendor Credit",
+      type: "vendor_credit",
+      accountNumberMasked: "",
+      balance: 0,
+      currency,
+      institution: "Supplier credit line",
+      lastSynced: now,
+    },
+  ];
+}
 
 export const memberSchema: EntitySchema<ProjectMember> = {
   tab: TABS.members,
