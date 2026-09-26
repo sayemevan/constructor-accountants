@@ -6,10 +6,11 @@ This file is always loaded. Keep it short. Detailed rules live in `ai-context/`.
 
 ## Repository status (update as phases complete)
 
-- **Current phase:** Phase 0 — architecture and AI context prepared; application not yet scaffolded.
-- `src/`, `public/`, root `package.json`: **legacy Google-Sheets prototype ("BuildLedger")**. It is a
-  UX/domain reference only. Do NOT extend it, do NOT copy its data layer, do NOT treat its types as the
-  schema. See `docs/adr/0016-legacy-prototype.md`. It will move to `legacy/` when the monorepo is scaffolded.
+- **Current phase:** Phase 0 — steps 1–2 done (prototype moved to `legacy/`, pnpm monorepo scaffolded:
+  `apps/web`, `apps/api`, `packages/contracts`, `packages/config`). No features yet. Next: roadmap step 3.
+- `legacy/`: **frozen Google-Sheets prototype ("BuildLedger")**, outside the pnpm workspace, excluded from
+  build/lint/format. UX/domain reference only. Do NOT extend it, do NOT copy its data layer, do NOT treat its
+  types as the schema. See `docs/adr/0016-legacy-prototype.md`.
 - Source requirements: `docs/reference/construction-accounting-architecture.pdf` (Chapters 1–19).
   Where it conflicts with `ai-context/`, **`ai-context/` wins** (corrections are listed in
   `docs/architecture/design-review.md`).
@@ -38,5 +39,16 @@ This file is always loaded. Keep it short. Detailed rules live in `ai-context/`.
 
 ## Commands
 
-Not yet available — the monorepo has not been scaffolded (Phase 0). When it is, list here:
-install, dev, lint, typecheck, test (unit / integration / e2e), prisma migrate, build.
+Node 24 (`.nvmrc`), pnpm (version pinned in root `package.json` → `packageManager`). Run from the repo root.
+
+| Task | Command |
+|---|---|
+| Install | `pnpm install` |
+| Dev (contracts watch + api :3001 + web :3000) | `pnpm dev` |
+| Lint (zero warnings) | `pnpm lint` |
+| Typecheck | `pnpm typecheck` |
+| Format / check formatting | `pnpm format` / `pnpm format:check` |
+| Build all | `pnpm build` |
+| One package | `pnpm --filter @repo/api <script>` (also `@repo/web`, `@repo/contracts`) |
+
+Not yet available: tests (unit / integration / e2e), Prisma migrate — added in later Phase 0 steps.

@@ -21,7 +21,7 @@ Load for any non-trivial task. These rules bind Claude Code, Cursor, and any oth
 14. Never delete, skip, or weaken tests to make a build pass.
 15. Never run destructive commands against shared databases (`migrate reset`, `db push`, `DROP`) or push to
     protected branches; never commit `.env` files.
-16. Never touch `legacy/` (or the current root `src/` prototype) except to move/archive it when explicitly asked.
+16. Never touch `legacy/` (the frozen prototype) except to move/archive it when explicitly asked.
 17. Never fabricate results: if tests weren't run or failed, say so.
 
 ## Always

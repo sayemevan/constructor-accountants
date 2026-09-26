@@ -73,3 +73,6 @@ Renovate or Dependabot for updates.
 ## Version policy
 Pin exact versions in lockfile; upgrade deliberately (Renovate PRs, CI green). Verify current major-version
 APIs (Next.js, Prisma, NestJS) against official docs at scaffold time rather than relying on memory.
+Scaffold (2026-09): Next 16, NestJS 12 (ESM-only → all workspace packages are `"type": "module"`), React 19,
+TypeScript **6.0** and ESLint **9** — held back from TS 7 / ESLint 10 until typescript-eslint and
+eslint-config-next's plugins support them.

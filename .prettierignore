@@ -1,0 +1,10 @@
+# Frozen prototype (ADR-0016) and hand-written docs are not formatted.
+legacy/
+ai-context/
+docs/
+*.md
+
+pnpm-lock.yaml
+dist/
+.next/
+next-env.d.ts

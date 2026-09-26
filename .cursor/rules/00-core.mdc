@@ -10,4 +10,4 @@ Read and follow these files before any change:
 Then load only the task-specific context listed in the routing table of @CLAUDE.md
 (module file in ai-context/modules/, plus the standards for the layer you touch).
 
-The root `src/` directory is a legacy Google-Sheets prototype: do not extend it or copy its data layer.
+`legacy/` is the frozen Google-Sheets prototype: do not extend it or copy its data layer.
