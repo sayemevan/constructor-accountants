@@ -24,3 +24,6 @@ coverage/
 .DS_Store
 *.pem
 .vercel
+
+# generated code
+apps/api/src/generated/

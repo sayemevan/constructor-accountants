@@ -13,7 +13,7 @@ Images: multi-stage, non-root user, pinned base digests, healthchecks, no secret
 ## Environments
 | Env | Purpose | Data | Notes |
 |---|---|---|---|
-| Local dev | Development, AI coding | Seed data | `docker compose -f infrastructure/compose/dev.yml up` (Postgres, MinIO, Mailpit); apps run with `pnpm dev` |
+| Local dev | Development, AI coding | Seed data | `docker compose -f infrastructure/compose/dev.yml up` (Postgres, S3-compatible RustFS, Mailpit); apps run with `pnpm dev` |
 | CI/test | Automated tests | Ephemeral (Testcontainers) | No shared DB; no external services |
 | Staging | QA, UAT, release rehearsal | Synthetic/anonymized only | Same topology as production, smaller |
 | Production SaaS | Customers | Real | Multi-tenant |

@@ -6,11 +6,13 @@ Load when: throwing, catching, or mapping errors (backend) or displaying errors 
 | Class | HTTP | Default code | When |
 |---|---|---|---|
 | (Zod pipe) | 400 | `VALIDATION_FAILED` | Shape/format of body, query, params invalid |
+| (framework) | 400 | `BAD_REQUEST` | Malformed request (e.g. invalid JSON body) or unmapped 4xx |
 | `UnauthenticatedError` | 401 | `UNAUTHENTICATED` / `SESSION_EXPIRED` / `INVALID_CREDENTIALS` | No/invalid/expired session; bad login |
 | `ForbiddenError` | 403 | `PERMISSION_DENIED` | Authenticated, lacks permission code |
 | `NotFoundError` | 404 | `NOT_FOUND` (`PROJECT_NOT_FOUND` etc. optional) | Missing, other tenant, or outside assigned scope |
 | `ConflictError` | 409 | `CONFLICT`, `VERSION_CONFLICT`, `DUPLICATE_VALUE`, `IDEMPOTENCY_KEY_REUSED`, `REQUEST_IN_PROGRESS` | Uniqueness, optimistic lock, idempotency |
 | `BusinessRuleError` | 422 | specific, e.g. `PROJECT_INVALID_STATUS_TRANSITION`, `ALLOCATION_EXCEEDS_BALANCE`, `BOOKS_LOCKED`, `PAYROLL_PERIOD_OVERLAP`, `ATTENDANCE_LOCKED`, `SELF_APPROVAL_NOT_ALLOWED`, `PARTY_ROLE_REQUIRED`, `PROJECT_CLOSED` | Valid request that violates a domain rule |
+| (body parser) | 413 | `PAYLOAD_TOO_LARGE` | JSON body over the parser limit |
 | (upload) | 413 / 415 | `FILE_TOO_LARGE` / `UNSUPPORTED_FILE_TYPE` | Upload limits |
 | (throttler) | 429 | `RATE_LIMITED` | Too many requests (`Retry-After` header) |
 | `ServiceUnavailableError` | 503 | `SERVICE_UNAVAILABLE` | Dependency down (DB, storage) — retryable |
@@ -31,6 +33,8 @@ there + document in the module file.
 - `requestId` always present (also in `X-Request-Id` response header).
 
 ## Global exception filter
+Code: `apps/api/src/core/errors/` (`global-exception.filter.ts` + `map-exception.ts`). RLS-violation → 404 mapping
+is added with the tenancy spike (roadmap step 7); until then `P2003` always maps to 409 `CONFLICT`.
 Maps: our error classes → table above; Zod errors → 400 with details; Prisma errors: `P2002` → 409
 `DUPLICATE_VALUE` (field names mapped to API paths, constraint names never exposed), `P2025` → 404, `P2003` →
 409/422 depending on context, `P2034` (serialization/deadlock) → retry once in TransactionRunner then 409

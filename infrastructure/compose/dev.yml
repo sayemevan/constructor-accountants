@@ -1,0 +1,74 @@
+# Local development dependencies (ai-context/17-deployment-architecture.md).
+# Dev-only credentials below are intentionally public; never reuse them outside a developer machine.
+#
+#   docker compose -f infrastructure/compose/dev.yml up -d
+#
+# Host ports can be overridden with POSTGRES_PORT, S3_PORT, S3_CONSOLE_PORT, MAILPIT_SMTP_PORT, MAILPIT_UI_PORT.
+name: construction-erp-dev
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates the app_owner / app_user roles and the application database (06-multi-tenancy.md).
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d construction_erp']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  s3:
+    # S3-compatible object storage for the `s3` storage driver (15-file-storage.md). RustFS is a MinIO-compatible
+    # server; MinIO no longer publishes images on Docker Hub. Console: http://localhost:9001
+    image: rustfs/rustfs:1.0.0
+    environment:
+      RUSTFS_ACCESS_KEY: devaccesskey
+      RUSTFS_SECRET_KEY: devsecretkey
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports:
+      - '${S3_PORT:-9000}:9000'
+      - '${S3_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - s3-data:/data
+
+  s3-init:
+    # One-shot: waits for the S3 endpoint, creates the private dev bucket, then exits.
+    image: amazon/aws-cli:2.37.4
+    depends_on:
+      - s3
+    environment:
+      AWS_ACCESS_KEY_ID: devaccesskey
+      AWS_SECRET_ACCESS_KEY: devsecretkey
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        for i in $$(seq 1 30); do aws --endpoint-url http://s3:9000 s3api list-buckets >/dev/null 2>&1 && break; sleep 1; done;
+        aws --endpoint-url http://s3:9000 s3api head-bucket --bucket construction-erp-dev 2>/dev/null ||
+        aws --endpoint-url http://s3:9000 s3api create-bucket --bucket construction-erp-dev
+    restart: 'no'
+
+  mailpit:
+    # SMTP sink: every email the app sends lands in the web UI at http://localhost:8025.
+    image: axllent/mailpit:v1.27
+    ports:
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${MAILPIT_UI_PORT:-8025}:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:
+  s3-data:

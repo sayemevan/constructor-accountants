@@ -1,0 +1,17 @@
+// Multi-file Prisma schema (ADR-0004, ai-context/05-database-architecture.md).
+// This file holds only the generator and datasource. Each module owns one file next to it:
+// `<module>.prisma` (tenant.prisma, party.prisma, finance.prisma, …). Conventions: 05 §1; tenancy: 06.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+// Connection URLs live in prisma.config.ts (Prisma CLI) and core/config (runtime, via the pg driver adapter).
+datasource db {
+  provider = "postgresql"
+}

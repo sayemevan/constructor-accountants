@@ -6,8 +6,10 @@ This file is always loaded. Keep it short. Detailed rules live in `ai-context/`.
 
 ## Repository status (update as phases complete)
 
-- **Current phase:** Phase 0 — steps 1–2 done (prototype moved to `legacy/`, pnpm monorepo scaffolded:
-  `apps/web`, `apps/api`, `packages/contracts`, `packages/config`). No features yet. Next: roadmap step 3.
+- **Current phase:** Phase 0 — steps 1–4 done (prototype in `legacy/`; pnpm monorepo; dev compose
+  `infrastructure/compose/dev.yml`; API skeleton in `apps/api/src/core/`: `config` (Zod env), `logging` (pino +
+  requestId), `errors` (typed errors + global filter/envelope), `database` (Prisma 7 + pg adapter), `health`;
+  multi-file schema in `apps/api/prisma/schema/`; `cli.ts migrate`). No features yet. Next: roadmap step 5.
 - `legacy/`: **frozen Google-Sheets prototype ("BuildLedger")**, outside the pnpm workspace, excluded from
   build/lint/format. UX/domain reference only. Do NOT extend it, do NOT copy its data layer, do NOT treat its
   types as the schema. See `docs/adr/0016-legacy-prototype.md`.
@@ -51,4 +53,11 @@ Node 24 (`.nvmrc`), pnpm (version pinned in root `package.json` → `packageMana
 | Build all | `pnpm build` |
 | One package | `pnpm --filter @repo/api <script>` (also `@repo/web`, `@repo/contracts`) |
 
-Not yet available: tests (unit / integration / e2e), Prisma migrate — added in later Phase 0 steps.
+| Dev services (Postgres, RustFS S3, Mailpit) | `docker compose -f infrastructure/compose/dev.yml up -d` |
+| API env (first time) | `cp apps/api/.env.example apps/api/.env` |
+| Unit tests | `pnpm test` |
+| Create a migration (dev) | `pnpm --filter @repo/api db:migrate:dev --name <name>` |
+| Apply migrations (built CLI) | `pnpm --filter @repo/api build && pnpm --filter @repo/api cli migrate` |
+
+Prisma client is generated into `apps/api/src/generated/` (gitignored) by build/lint/typecheck/dev.
+Not yet available: integration (Testcontainers) / e2e tests, `cli seed` — added in later steps.
