@@ -3,11 +3,12 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 import { ConfigValidationError, loadConfig } from './core/config/index.js';
+import { installJobSchema, roleOf } from './core/jobs/index.js';
 
 /**
  * Operational one-off commands, shipped in the api image (17):
- *   node dist/cli.js migrate   — apply pending migrations as the owner role. Run before rolling out new containers;
- *                                app processes never migrate on startup.
+ *   node dist/cli.js migrate   — apply pending migrations as the owner role, then install/upgrade the pg-boss
+ *                                schema. Run before rolling out new containers; app processes never migrate on startup.
  * `seed` and `setup` are added with the tenant module (roadmap steps 9+).
  */
 type Command = (args: readonly string[]) => Promise<number>;
@@ -25,7 +26,16 @@ async function migrate(): Promise<number> {
       'Invalid environment configuration:\n  - DATABASE_MIGRATION_URL: required for migrate',
     );
   }
-  return runPrisma(['migrate', 'deploy'], { DATABASE_MIGRATION_URL: config.database.migrationUrl });
+  const code = await runPrisma(['migrate', 'deploy'], {
+    DATABASE_MIGRATION_URL: config.database.migrationUrl,
+  });
+  if (code !== 0) return code;
+  await installJobSchema({
+    ownerUrl: config.database.migrationUrl,
+    runtimeRole: roleOf(config.database.url),
+  });
+  process.stdout.write('pg-boss schema is up to date.\n');
+  return 0;
 }
 
 /** Runs the Prisma CLI bundled with the app (no npx, no network) from the app root, where prisma.config.ts lives. */

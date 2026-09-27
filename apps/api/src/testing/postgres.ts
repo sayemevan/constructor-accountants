@@ -6,9 +6,11 @@ import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import pg from 'pg';
 
+import { installJobSchema } from '../core/jobs/index.js';
+
 /**
- * Integration-test PostgreSQL (14): a throwaway postgres:17 container with the production role model and every
- * migration applied. Test-only code — excluded from the build.
+ * Integration-test PostgreSQL (14): a throwaway postgres:17 container with the production role model, every
+ * migration applied and the pg-boss schema installed — the same steps as `cli.js migrate`. Test-only code — excluded from the build.
  */
 
 const API_ROOT = join(import.meta.dirname, '..', '..');
@@ -28,7 +30,7 @@ const POSTGRES_IMAGE = 'postgres:17';
 export type DatabaseRole = 'postgres' | 'app_owner' | 'app_user' | 'app_platform';
 
 export interface TestDatabase {
-  /** Connection URL for a role. `app_platform` (BYPASSRLS) exists only after {@link createPlatformRole}. */
+  /** Connection URL for a role (the roles of 06, created by the dev bootstrap SQL). */
   url(role: DatabaseRole): string;
   /** Runs SQL (multi-statement allowed, no parameters) as the given role. */
   exec(role: DatabaseRole, sql: string): Promise<void>;
@@ -52,21 +54,8 @@ export async function startTestDatabase(): Promise<TestDatabase> {
     .start();
   const database = testDatabase(container);
   await applyMigrations(database.url('app_owner'));
+  await installJobSchema({ ownerUrl: database.url('app_owner'), runtimeRole: 'app_user' });
   return database;
-}
-
-/** The platform role of 06 (BYPASSRLS), with DML on every current table. Call after creating test tables. */
-export async function createPlatformRole(database: TestDatabase): Promise<void> {
-  await database.exec(
-    'postgres',
-    `CREATE ROLE app_platform LOGIN PASSWORD 'app_platform' NOSUPERUSER BYPASSRLS;
-     GRANT CONNECT ON DATABASE ${DATABASE} TO app_platform;`,
-  );
-  await database.exec(
-    'app_owner',
-    `GRANT USAGE ON SCHEMA public TO app_platform;
-     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_platform;`,
-  );
 }
 
 function testDatabase(container: StartedPostgreSqlContainer): TestDatabase {

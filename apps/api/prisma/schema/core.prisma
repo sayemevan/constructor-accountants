@@ -1,0 +1,50 @@
+// Core infrastructure tables (ai-context/05 §3 Core, 06, 25). Owned by apps/api/src/core, not by a module.
+
+/// Tenant-owned (RLS): per-tenant counters for human numbers (`PRJ-2026-0007`, 05 §1). Incremented inside the
+/// business transaction by NumberSequenceService; "sequential", not "gapless" (a rollback burns a number).
+model NumberSequence {
+  /// DB default reads the transaction-local tenant, so callers never pass tenantId (06 rule 2).
+  tenantId    String   @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @map("tenant_id") @db.Uuid
+  /// e.g. `project`, `payroll_run:2026`. Lowercase (CHECK in the migration).
+  sequenceKey String   @map("sequence_key")
+  /// Prefix of the formatted code, fixed when the sequence is first used.
+  prefix      String
+  /// The value the next allocation returns.
+  nextValue   BigInt   @map("next_value")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@id([tenantId, sequenceKey])
+  @@map("number_sequences")
+}
+
+/// Tenant-owned (RLS): the transactional outbox (25). Written in the same transaction as the change that raised
+/// the event; the worker's OutboxDispatcher fans it out to handlers as pg-boss jobs and sets `processed_at`.
+/// Rows are immutable except for the dispatch columns (column-level grants in the migration).
+model OutboxEvent {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String    @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @map("tenant_id") @db.Uuid
+  /// PascalCase past tense, e.g. `ProjectCreated` (25 "Event conventions").
+  eventType     String    @map("event_type")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  /// The event's `data`: ids and small facts only, no PII.
+  payload       Json
+  schemaVersion Int       @default(1) @map("schema_version")
+  /// Request id of the HTTP request (or job) that raised the event (21).
+  correlationId String?   @map("correlation_id")
+  /// → users.id once the user module exists (session 4).
+  actorUserId   String?   @map("actor_user_id") @db.Uuid
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  processedAt   DateTime? @map("processed_at") @db.Timestamptz(3)
+  /// Failed dispatch attempts (enqueueing, not handler runs — those are pg-boss retries).
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, id])
+  @@index([processedAt, occurredAt])
+  @@map("outbox_events")
+}

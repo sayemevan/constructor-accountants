@@ -153,6 +153,53 @@ module.exports = {
     },
     ...moduleDependencyRules,
 
+    /* ---------- API: database access (06 rule 1, ADR-0005 Compliance) ---------- */
+    {
+      name: 'modules-no-base-prisma',
+      comment:
+        'Modules reach the database only through core/tenancy (AppTenantDatabase, TransactionRunner) — never ' +
+        'PrismaService, a PrismaClient instance or the driver adapter, which bypass the tenant setting (06 rule 1).',
+      severity: 'error',
+      from: { path: `${MOD}/` },
+      to: { path: `${API}/core/database/` },
+    },
+    {
+      name: 'modules-no-prisma-client-runtime',
+      comment:
+        'Modules may import generated Prisma *types* (models, inputs) and enums, but not the PrismaClient class ' +
+        'or @prisma/* runtime packages: a client constructed in a module would bypass RLS setup (06 rule 1).',
+      severity: 'error',
+      from: { path: `${MOD}/` },
+      to: {
+        path: [
+          `${API}/generated/prisma/(client|internal/class)\\.ts$`,
+          'node_modules/@prisma/(client|adapter-pg)/',
+        ],
+        dependencyTypesNot: ['type-only'],
+      },
+    },
+    {
+      name: 'modules-no-raw-pg',
+      comment:
+        'Modules must not open their own PostgreSQL connections (pg / pg-boss): they would bypass the tenant ' +
+        'setting. SQL goes through core/tenancy; jobs through core/jobs (06 rule 1, ADR-0013).',
+      severity: 'error',
+      from: { path: `${MOD}/` },
+      to: { path: 'node_modules/(pg|pg-boss)/', dependencyTypesNot: ['type-only'] },
+    },
+    {
+      name: 'platform-database-only-in-platform',
+      comment:
+        'The app_platform (BYPASSRLS) client sees every tenant; only the platform module may use it (06 ' +
+        '"Platform operations").',
+      severity: 'error',
+      from: {
+        path: `${API}/`,
+        pathNot: [`${API}/core/platform-database/`, `${MOD}/platform/`, '/__tests__/'],
+      },
+      to: { path: `${API}/core/platform-database/` },
+    },
+
     /* ---------- API: layers inside a module (03) ---------- */
     {
       name: 'domain-is-pure',
@@ -210,7 +257,9 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: ['node_modules', '^apps/api/src/generated/', '/__tests__/.*/generated/'] },
-    exclude: { path: ['(^|/)dist/', '(^|/)\\.next/'] },
+    // Our own build output only. An unanchored `dist/` would also drop every npm package that ships from dist/
+    // (e.g. @prisma/adapter-pg), silently hiding it from the rules above.
+    exclude: { path: ['^(apps|packages)/[^/]+/(dist|\\.next)/'] },
     tsPreCompilationDeps: true,
     combinedDependencies: false,
     // Resolves apps/web's `@/*` alias. Its tsconfig `paths` has no baseUrl (deprecated in TS 6), which

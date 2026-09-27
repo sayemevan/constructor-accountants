@@ -22,8 +22,8 @@ disabled in self-hosted mode.
 - **HTTP:** session → `active_tenant_id` → membership must be ACTIVE, tenant must be ACTIVE → `TenantContext`.
   The client never supplies tenantId (body, query, header, or URL). Switching tenant = `POST /auth/switch-tenant`,
   which re-validates membership and updates the session.
-- **Jobs:** every job payload includes `tenantId`; the job runner validates the tenant is ACTIVE and runs the
-  handler inside `TenantContext.run(...)`. Jobs that iterate tenants (reminder scans) enqueue **one job per tenant**.
+- **Jobs:** every job payload includes `tenantId`; the job runner (`TenantJobRunner`, `core/jobs`) validates the
+  tenant is ACTIVE and runs the handler inside `TenantContext.run(...)` — inactive or missing tenant → skipped, logged. Jobs that iterate tenants (reminder scans) enqueue **one job per tenant**.
 - **Outbox events:** carry `tenantId`; handlers run in that tenant's context.
 - **Platform operations** (SaaS operator: create/suspend tenant, usage stats) run in the `platform` module using a
   separate Prisma client/role with BYPASSRLS, are audited, and never expose tenant business data in bulk.
@@ -54,8 +54,19 @@ CREATE POLICY tenant_isolation ON projects
   un-awaited query past the context boundary (it fails closed with `TenantContextMissingError`).
 - If `app.tenant_id` is not set, the policy compares with NULL → matches no rows, inserts fail (fail closed).
 - Roles: `app_owner` (runs migrations, owns tables), `app_user` (API/worker; DML only; no BYPASSRLS),
-  `app_platform` (platform module only; BYPASSRLS), read-only `app_report` optional later.
-- Global tables without tenant_id (users, sessions, auth_tokens, permissions) have no RLS; access is guarded in
+  `app_platform` (platform module only; BYPASSRLS; `DATABASE_PLATFORM_URL`, optional), read-only `app_report`
+  optional later. Dev/test roles come from `infrastructure/compose/postgres-init/01-roles-and-database.sql`.
+  `app_platform` is optional, so a migration that grants/revokes for it wraps that in a `DO` block checking
+  `pg_roles` (example: the `…_tenant` migration).
+- Nest wiring: repositories inject `AppTenantDatabase` (`core/tenancy`) and query `db.client`; application services
+  use `TransactionRunner.run(fn)`. `PlatformDatabase` (`core/platform-database`) is importable only by the
+  `platform` module. Both enforced by dependency-cruiser (`modules-no-base-prisma`,
+  `modules-no-prisma-client-runtime`, `platform-database-only-in-platform`).
+- **The one cross-tenant exception: the outbox dispatcher.** `outbox_events` also has `outbox_dispatcher_read`
+  (SELECT) and `outbox_dispatcher_mark` (UPDATE) policies, open when the transaction-local
+  `app.outbox_dispatcher = 'on'`. Only `core/jobs/outbox-dispatcher.ts` sets it; never INSERT; UPDATE is limited to
+  the dispatch columns by grants (ADR-0005 "Outbox dispatcher"). Never add such a flag to another table without an ADR.
+- Global tables without tenant_id (tenants, users, sessions, auth_tokens, permissions) have no RLS; access is guarded in
   their modules and they must never be exposed via tenant-scoped list endpoints.
 
 ## Rules for code

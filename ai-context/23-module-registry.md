@@ -7,8 +7,8 @@ for ownership and allowed dependencies. Update it in the same PR as any change t
 
 | Module | Kind | Phase | Owns tables | Public services (index.ts) | Context file |
 |---|---|---|---|---|---|
-| `core` (infra) | platform | 0–1 | outbox_events, idempotency_keys, number_sequences | TransactionRunner, TenantContext, Outbox, NumberSequenceService, Clock, Config | 03, 06, 12 |
-| `tenant` | core | 1 | tenants, tenant_settings | TenantService, SettingsService, DeploymentModeService, EntitlementService | modules/tenant-management.md |
+| `core` (infra) | platform | 0–1 | outbox_events, idempotency_keys, number_sequences | TransactionRunner, TenantContext, AppTenantDatabase (repositories), Outbox (`core/outbox`), NumberSequenceService (`core/sequences`), Clock, Config, `uuidv7`, `omitUndefined`; worker only (`core/jobs`): `@OutboxEventHandler`, TenantJobRunner, JobQueue; PlatformDatabase (platform module only). Built: outbox_events, number_sequences (session 3); idempotency_keys in session 6 | 03, 06, 12 |
+| `tenant` | core | 1 | tenants, tenant_settings | TenantService, SettingsService (built); DeploymentModeService, EntitlementService (session 8) | modules/tenant-management.md |
 | `auth` | core | 1 | sessions, auth_tokens | SessionService (current user/session) | modules/authentication.md |
 | `user` | core | 1 | users, tenant_memberships | MembershipQueryService, UserService | modules/user-management.md |
 | `authorization` | core | 1 | permissions, roles, role_permissions, membership_roles | PermissionService (`can`, scope resolution), RoleService | modules/authorization.md |

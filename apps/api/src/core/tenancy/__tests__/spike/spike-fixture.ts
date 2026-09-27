@@ -4,11 +4,7 @@ import { join } from 'node:path';
 
 import { PrismaPg } from '@prisma/adapter-pg';
 
-import {
-  createPlatformRole,
-  startTestDatabase,
-  type TestDatabase,
-} from '../../../../testing/postgres.js';
+import { startTestDatabase, type TestDatabase } from '../../../../testing/postgres.js';
 import { TenantContext } from '../../tenant-context.js';
 import { TenantDatabase } from '../../tenant-database.js';
 import { PrismaClient as SpikePrismaClient } from './generated/client.js';
@@ -33,7 +29,6 @@ export interface SpikeFixture {
 export async function startSpike(poolSize = 10): Promise<SpikeFixture> {
   const database = await startTestDatabase();
   await database.exec('app_owner', await readFile(join(import.meta.dirname, 'spike.sql'), 'utf8'));
-  await createPlatformRole(database);
 
   const client = (role: 'app_user' | 'app_platform') =>
     new SpikePrismaClient({

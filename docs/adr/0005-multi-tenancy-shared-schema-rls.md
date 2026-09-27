@@ -90,3 +90,36 @@ Nest wiring (TenantDatabase provider over PrismaService, TenantGuard sets Tenant
 `TenantDatabase.transaction`), the `app_platform` BYPASSRLS client, and the lint rule forbidding the base Prisma
 client in modules. The spike tables are deleted once the first real tenant-owned tables and their isolation tests
 exist (Phase 1).
+
+### Step 8a done (Phase 1 session 1)
+- `DatabaseModule` provides `TenantContext` (one per process), `AppTenantDatabase` (`TenantDatabase<PrismaClient>`
+  over `PrismaService` — a subclass, because Nest resolves constructor parameters by runtime class) and
+  `TransactionRunner` (`run(fn)` = `AppTenantDatabase.transaction(fn)`). Modules import only `core/tenancy`.
+- `core/platform-database`: `PlatformDatabase` (+ non-global `PlatformDatabaseModule`), a lazily created
+  `app_platform` client from the optional `DATABASE_PLATFORM_URL`; throws `PlatformDatabaseNotConfiguredError` when
+  unset (self-hosted). The dev role bootstrap now creates `app_platform` with the same default DML grants as
+  `app_user`.
+- Compliance rules in `.dependency-cruiser.cjs`: `modules-no-base-prisma` (no `core/database`),
+  `modules-no-prisma-client-runtime` (generated Prisma *types* and enums allowed, the `PrismaClient` class and
+  `@prisma/client`/`@prisma/adapter-pg` runtime not), `platform-database-only-in-platform`.
+- Remaining for later sessions: `TenantGuard` sets the context (session 4). The job runner does since session 3 (below).
+
+### Outbox dispatcher (Phase 1 session 3, 2026-09-27)
+The worker's `OutboxDispatcher` must find pending events of **every** tenant, but it connects as `app_user` (17), so
+the `tenant_isolation` policy hides everything. Decision: `outbox_events` gets two extra permissive policies,
+`outbox_dispatcher_read` (FOR SELECT) and `outbox_dispatcher_mark` (FOR UPDATE), that apply when the
+transaction-local setting `app.outbox_dispatcher = 'on'`. Only the dispatcher's claim transaction sets it
+(`core/jobs/outbox-dispatcher.ts`).
+- **Bounded:** only `outbox_events`; never INSERT (an event without a tenant still fails); UPDATE is limited by
+  column grants to `processed_at`, `attempts`, `last_error`. Event payloads carry ids and small facts only (25).
+- **Same threat model as the tenant setting:** RLS here catches missing tenant filters, not hostile code running as
+  `app_user`, which could already call `set_config('app.tenant_id', …)`. Setting the dispatcher flag is just as
+  explicit and greppable.
+- **Rejected:** the `app_platform` BYPASSRLS client (optional, reserved for the platform module); iterating tenants
+  on every poll (cost grows with the tenant count); a SECURITY DEFINER claim function (FORCE RLS applies to the
+  owner too, so it would need a policy for the owner role name, and more moving parts than a flag).
+- **Tested:** `core/outbox/__tests__/outbox.int.test.ts` (no flag → no rows; flag → every tenant for SELECT, INSERT
+  still rejected; app_user cannot UPDATE the payload or DELETE) and `core/jobs/__tests__/*.int.test.ts`.
+
+The job runner side is done too: `TenantJobRunner` (`core/jobs`) runs every handler inside
+`TenantContext.run(event.tenantId)` after checking the tenant is ACTIVE (06 "Jobs").

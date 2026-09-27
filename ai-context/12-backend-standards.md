@@ -65,6 +65,8 @@ Throw typed errors from `core/errors` (`NotFoundError`, `BusinessRuleError(code,
 ## Background jobs
 - Define job name constants + payload Zod schema in the owning module (`<module>/jobs/*.job.ts`).
 - Handlers: validate payload → establish TenantContext → do work in small transactions → idempotent.
+  `TenantJobRunner.run(tenantId, fn)` (`core/jobs`) does the context + ACTIVE-tenant check; outbox event handlers
+  get it automatically (25). Modules never open `pg`/`pg-boss` connections (dependency-cruiser `modules-no-raw-pg`).
 - Scheduled jobs registered centrally in `core/jobs/schedules.ts` with cron + timezone handling (per-tenant
   timezone computed in handler).
 

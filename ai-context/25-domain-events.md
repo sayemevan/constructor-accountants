@@ -13,14 +13,23 @@ Do not introduce events where a single module handles everything; do not chain e
 transaction (no sagas in MVP).
 
 ## Mechanism: transactional outbox
-1. Inside the business transaction: `outbox.add({ type, aggregateType, aggregateId, payload })` inserts into
-   `outbox_events` (with tenantId, correlationId, occurredAt, schemaVersion).
-2. After commit, a dispatcher (worker, polling every ~1 s with `FOR UPDATE SKIP LOCKED`, plus pg `NOTIFY` wake-up)
-   fans each event out to registered handlers as pg-boss jobs (one job per handler) and marks it processed.
-3. Handlers are idempotent (dedupe by `eventId` + handler name), run in the event's TenantContext, retry with
-   backoff, and dead-letter after N attempts (alert).
+Built in Phase 1 session 3: writer `Outbox` (`core/outbox`, every module), delivery in `core/jobs` (worker only).
+1. Inside the business transaction: `outbox.add({ type, aggregateType, aggregateId, data, schemaVersion? })`
+   inserts into `outbox_events`; tenant, occurredAt (Clock), correlationId and actorUserId come from context
+   (the last two are filled once auth exists — sessions 4–5; until then null).
+2. After commit, `OutboxDispatcher` (worker; LISTEN `outbox_events` wake-up + ~1 s polling) claims pending events
+   with `FOR UPDATE SKIP LOCKED` (dispatcher RLS flag — 06), inserts **one pg-boss job per handler through the same
+   transaction** and sets `processed_at`. So each (event, handler) is enqueued exactly once, even with several
+   worker replicas. A failed enqueue counts `attempts`/`last_error`; after 10 the event is left for an operator
+   (logged as error).
+3. Handlers: a provider with `@OutboxEventHandler({ name: 'kebab-name', events: ['ProjectCreated'] })` implementing
+   `handle(envelope)`, in the consuming module's `events/` folder, whose module is imported by `WorkerModule`.
+   Queue `outbox.<name>`; the job runs in the event's TenantContext via `TenantJobRunner` (skipped for inactive
+   tenants), is retried with exponential backoff (5 retries), then moved to `outbox.dead-letter` (logged as error).
+   Handlers must be idempotent (dedupe by `eventId` + handler name — a helper table arrives with the first real
+   handler that needs it).
 Guarantee: at-least-once delivery, in-order per aggregate not guaranteed (handlers must not assume ordering;
-re-read current state when it matters).
+re-read current state when it matters). Processed-event retention/cleanup: not yet (future cleanup job).
 
 ## Event conventions
 - Name: PascalCase past tense (`PayrollRunApproved`). Payload type exported from the emitting module's `index.ts`.

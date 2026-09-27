@@ -32,7 +32,8 @@ Load when: writing or changing tests, or finishing any feature.
 
 ## Conventions
 - Arrange-Act-Assert; one behaviour per test; names read as specs: `it('recovers advance up to net pay')`.
-- Test data via factories/builders (`makeProject({ status: 'ACTIVE' })`) in `test/factories`; each integration test
+- Test data via factories/builders (`makeProject({ status: 'ACTIVE' })`; API: `apps/api/src/testing/*-factory.ts`,
+  e.g. `makeTenantInput`); integration tests build Nest with `compileWithDatabase` (`src/testing/nest.ts`); each integration test
   creates its own tenants (always two) — no shared mutable fixtures, no dependency on test order.
 - Integration tests run against real PostgreSQL with migrations applied (Testcontainers, one container per worker,
   truncate or transactional isolation per test). **Never mock Prisma** in integration tests.

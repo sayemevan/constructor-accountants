@@ -23,7 +23,8 @@ Never copy production data into non-production without anonymization.
 ## Environment variables (validated at boot; documented in `.env.example`)
 ```text
 NODE_ENV, DEPLOYMENT_MODE=saas|self_hosted, APP_BASE_URL, LOG_LEVEL
-DATABASE_URL (app_user), DATABASE_MIGRATION_URL (app_owner), DATABASE_POOL_SIZE
+DATABASE_URL (app_user), DATABASE_MIGRATION_URL (app_owner), DATABASE_PLATFORM_URL (app_platform, optional;
+  SaaS platform module only), DATABASE_POOL_SIZE
 SESSION_IDLE_DAYS, SESSION_ABSOLUTE_DAYS, SIGNUP_ENABLED, TRUST_PROXY
 STORAGE_DRIVER=s3|local, S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY,
   S3_FORCE_PATH_STYLE, LOCAL_STORAGE_PATH, FILE_URL_SIGNING_SECRET, FILE_SCAN_ENABLED, CLAMAV_HOST
@@ -41,15 +42,18 @@ Single origin via reverse proxy: `/api/*` → api:3001, everything else → web:
 pre-select the login tenant, never as the authorization source).
 
 ## Database migrations
-- Run `cli.js migrate` (Prisma migrate deploy with `DATABASE_MIGRATION_URL`) as a **separate one-off step before**
-  rolling out new app containers. App processes never migrate on startup.
+- Run `cli.js migrate` (Prisma migrate deploy with `DATABASE_MIGRATION_URL`, then install/upgrade the `pgboss`
+  schema and grant the `DATABASE_URL` role DML on it) as a **separate one-off step before** rolling out new app
+  containers. App processes never migrate on startup: the worker starts pg-boss with `migrate: false` and fails fast
+  on an un-migrated database.
 - Migrations must be backward compatible with the previous app version (expand/contract, 05 §9) to allow rolling
   deploys and rollback of app containers.
 - Permission catalog sync + system category seed run after migrate (idempotent).
 
 ## Background workers
-`worker` runs as its own container (1+ replicas; pg-boss handles concurrency and singleton cron). Scale
-separately from `api`.
+`worker` runs as its own container (`node dist/worker.js`; 1+ replicas; pg-boss handles concurrency and singleton
+cron; the outbox dispatcher is safe with several replicas — `SKIP LOCKED`). Same env as `api` (no extra variables).
+Scale separately from `api`. Graceful shutdown on SIGTERM: stop dispatching, drain handler jobs, stop pg-boss.
 
 ## SaaS production topology
 Managed PostgreSQL (HA, PITR ≥ 7 days, automated daily snapshots retained 30 days), private S3-compatible bucket

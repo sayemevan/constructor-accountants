@@ -35,6 +35,7 @@ const envSchema = z
     EXPOSE_ERROR_DETAILS: z.stringbool().default(false),
     DATABASE_URL: postgresUrl,
     DATABASE_MIGRATION_URL: postgresUrl.optional(),
+    DATABASE_PLATFORM_URL: postgresUrl.optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(DEFAULT_DB_POOL_SIZE),
   })
   .refine((env) => !(env.EXPOSE_ERROR_DETAILS && env.NODE_ENV !== 'development'), {
@@ -58,6 +59,8 @@ export interface AppConfig {
     readonly url: string;
     /** Owner role (`app_owner`): migrations only. Required by `cli.js migrate`, unused by the API. */
     readonly migrationUrl: string | undefined;
+    /** Platform role (`app_platform`, BYPASSRLS): only the platform module's client. Optional (06). */
+    readonly platformUrl: string | undefined;
     readonly poolSize: number;
   };
 }
@@ -93,6 +96,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     database: Object.freeze({
       url: e.DATABASE_URL,
       migrationUrl: e.DATABASE_MIGRATION_URL,
+      platformUrl: e.DATABASE_PLATFORM_URL,
       poolSize: e.DATABASE_POOL_SIZE,
     }),
   });

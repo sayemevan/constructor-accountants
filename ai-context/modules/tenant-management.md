@@ -62,6 +62,29 @@ Subscriptions/plans (`plan_code`, limits for users/storage/features via Entitlem
 license file (offline-verifiable signed file; no mandatory phone-home), tenant custom domains/branding,
 tenant data export/import, fiscal year settings, multi-currency enablement.
 
+## Implementation status (Phase 1)
+Session 2 (step 9a) — data layer, no HTTP:
+- Schema `apps/api/prisma/schema/tenant.prisma`, migration `…_tenant`: `tenants` (global, no RLS; slug/currency/
+  country CHECKs), `tenant_settings` (RLS per 06, `tenant_id` DB default). `DELETE` revoked from `app_user` and
+  `app_platform` on both (tenants are closed, never deleted).
+- Contracts (`packages/contracts/src/tenant/`): `CreateTenantInput`, `TenantProfilePatch` (no slug, no base
+  currency), `TenantSettings` (strict; every field defaulted), `TenantSettingsPatch` (no `books`),
+  `TENANT_SETTINGS_SCHEMA_VERSION` = 1. Shared primitives in `common/primitives.ts`.
+- Settings keys (v1): `approval.{allowSelfApproval=false, paymentThreshold=null, expenseThreshold=null}`,
+  `payroll.{prorationBasis=CALENDAR_DAYS|WORKING_DAYS|FIXED_30_DAYS, overtimeMultiplier="1.50"}`,
+  `books.lockedUntil=null`, `reminders.dueReminderDays=[3,1]`. Numbering prefixes arrive with `number_sequences`
+  (session 3), file limits with `files` (Phase 2) — additive, no version bump. A breaking reshape bumps the schema
+  version and adds a step to `upgradeTenantSettings` (domain).
+- `TenantService.create` generates a UUIDv7 id and, inside that tenant's context, inserts the tenant + default
+  settings in one transaction (the provisioning primitive for setup/signup/platform). `getCurrent`,
+  `updateProfile(patch, expectedVersion)`. `SettingsService.get()` / `update(patch, expectedVersion)` (merge per
+  section; no-op patches don't bump the version).
+- Errors: duplicate slug → 409 `DUPLICATE_VALUE` (`slug`); stale version → 409 `VERSION_CONFLICT`; no tenant row →
+  404.
+- Not yet: HTTP endpoints, setup/signup, books-lock action, platform ops, `DeploymentModeService`,
+  `EntitlementService` (session 8); `TenantCreated`/`TenantSettingsChanged` events (outbox, session 3); audit
+  (session 5); `created_by_id`/`updated_by_id` (after `users`, session 4 — audit records the actor meanwhile).
+
 ## Must NOT
 Contain business logic of other modules; read other modules' tables; store per-user preferences (user
 module); implement authorization checks beyond its own endpoints; allow changing tenant from request input.

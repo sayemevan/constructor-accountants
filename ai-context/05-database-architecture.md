@@ -51,7 +51,8 @@ Key columns only; all tenant-owned tables also have `tenant_id` + standard colum
 ### Core
 - **tenants** (`tenant`): name, legal_name, slug UNIQUE, status (ACTIVE|SUSPENDED|CLOSED), base_currency,
   timezone, locale, country_code, tax_id, address fields, logo_file_id, plan_code (future).
-- **tenant_settings** (`settings`): tenant_id PK, `settings jsonb` (Zod-validated, versioned schema), version.
+- **tenant_settings** (`tenant`): tenant_id PK, `settings jsonb` (Zod-validated: `TenantSettings` in contracts),
+  schema_version (of the blob), version (optimistic lock).
   Holds payroll proration basis, overtime defaults, approval thresholds, maker-checker flag, books_locked_until,
   numbering prefixes, notification defaults, file limits.
 - **users** (`user`, global — no tenant_id): email citext UNIQUE, phone, name, password_hash, status
@@ -70,13 +71,17 @@ Key columns only; all tenant-owned tables also have `tenant_id` + standard colum
 - **auth_tokens** (`auth`, global): user_id, tenant_id NULL, type (PASSWORD_RESET|EMAIL_VERIFY|INVITATION),
   token_hash UNIQUE, expires_at, used_at.
 - **audit_logs** (`audit`): see 21. Append-only.
-- **outbox_events** (`core`): tenant_id, event_type, aggregate_type, aggregate_id, payload jsonb, occurred_at,
-  processed_at, attempts, last_error. Index (processed_at NULLS FIRST, occurred_at).
+- **outbox_events** (`core`, built): tenant_id, event_type, aggregate_type, aggregate_id, payload jsonb,
+  schema_version, correlation_id, actor_user_id, occurred_at, processed_at, attempts, last_error.
+  Index (processed_at, occurred_at). Immutable except the dispatch columns (column grants); no DELETE for app_user;
+  AFTER INSERT statement trigger → `pg_notify('outbox_events')`; dispatcher policies (06).
 - **idempotency_keys** (`core`): tenant_id, user_id, key, request_hash, response_status, response_body jsonb,
   created_at, expires_at. PK (tenant_id, user_id, key).
-- **number_sequences** (`core`): tenant_id, sequence_key, prefix, next_value. PK (tenant_id, sequence_key).
-  Incremented with `UPDATE … RETURNING` inside the business transaction (gap-free per committed row is **not**
-  guaranteed on rollback — acceptable; documented to users as "sequential", not "gapless").
+- **number_sequences** (`core`, built): tenant_id, sequence_key, prefix, next_value bigint, updated_at.
+  PK (tenant_id, sequence_key); no DELETE for app_user. Created on first use and incremented with one
+  `INSERT … ON CONFLICT DO UPDATE … RETURNING` (same row lock as `UPDATE … RETURNING`) inside the business
+  transaction (gap-free per committed row is **not** guaranteed on rollback — acceptable; documented to users as
+  "sequential", not "gapless").
 - **files**, **documents** (`files`, `document`): see 15.
 - **notifications**, **notification_preferences**, **notification_deliveries** (`notification`): see 16.
 - **report_exports** (`reporting`): report_key, params jsonb, format, status, file_id, requested_by_id, expires_at.
