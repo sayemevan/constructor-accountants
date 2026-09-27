@@ -29,23 +29,34 @@ disabled in self-hosted mode.
   separate Prisma client/role with BYPASSRLS, are audited, and never expose tenant business data in bulk.
 
 ## RLS implementation
+Template for every tenant-owned table's migration (validated by the spike — ADR-0005 "Spike outcome"; working
+example: `apps/api/src/core/tenancy/__tests__/spike/spike.sql`):
 ```sql
+-- tenant_id defaults to the transaction's tenant, so repositories never pass it (Prisma: @default(dbgenerated(...)))
+tenant_id uuid NOT NULL DEFAULT (NULLIF(current_setting('app.tenant_id', true), ''))::uuid REFERENCES tenants (id),
+CONSTRAINT projects_tenant_id_id_key UNIQUE (tenant_id, id),
+
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE projects FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON projects
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = (NULLIF(current_setting('app.tenant_id', true), ''))::uuid)
+  WITH CHECK (tenant_id = (NULLIF(current_setting('app.tenant_id', true), ''))::uuid);
 ```
-- The tenant-scoped Prisma client (a Prisma client extension) runs each operation inside a transaction that first
-  executes `SELECT set_config('app.tenant_id', $1, true)` (transaction-local — safe with PgBouncer transaction
-  pooling). Interactive transactions opened by application services set it once at the start.
-- If `app.tenant_id` is not set, `current_setting(..., true)` is NULL → policy matches no rows (fail closed).
+- **`NULLIF(…, '')` is mandatory.** After a transaction-local `set_config` commits, a pooled session holds `''`
+  (not NULL); a bare `::uuid` cast then raises on every later query without a tenant.
+- `TenantDatabase` (`core/tenancy`) wraps the Prisma client: `db.client` outside a transaction runs each operation
+  as `$transaction([set_config('app.tenant_id', $1, true), op])` (transaction-local — safe with PgBouncer
+  transaction pooling); `db.transaction(fn)` sets it once for an interactive transaction and nested calls join it.
+  Never call `$transaction` on a Prisma client directly (the tenant client type omits it).
+- Cost: ~0.4 ms of round trips per transaction; RLS evaluation itself is negligible. Multi-query use cases
+  (including list + count) run in one `transaction()`.
+- Prisma queries are lazy: always `await` them inside the code that runs under `TenantContext.run`; never return an
+  un-awaited query past the context boundary (it fails closed with `TenantContextMissingError`).
+- If `app.tenant_id` is not set, the policy compares with NULL → matches no rows, inserts fail (fail closed).
 - Roles: `app_owner` (runs migrations, owns tables), `app_user` (API/worker; DML only; no BYPASSRLS),
   `app_platform` (platform module only; BYPASSRLS), read-only `app_report` optional later.
 - Global tables without tenant_id (users, sessions, auth_tokens, permissions) have no RLS; access is guarded in
   their modules and they must never be exposed via tenant-scoped list endpoints.
-- Phase 1 includes a spike to validate the Prisma extension + RLS approach and measure overhead. If RLS proves
-  impractical, layers 1–2 remain mandatory and the fallback is recorded in ADR-0005 — no silent removal.
 
 ## Rules for code
 1. Never use the raw/base Prisma client in modules. Use the injected tenant-scoped client via repositories.
@@ -65,7 +76,8 @@ CREATE POLICY tenant_isolation ON projects
 ## Mandatory tests (see 14)
 For every tenant-owned resource: a user of tenant B receives 404 for tenant A's record on GET/PATCH/action
 endpoints, list endpoints never include A's rows, and creating a record that references A's id from B fails.
-A DB-level test asserts that every table with a `tenant_id` column has RLS enabled + forced and a policy.
+A DB-level test asserts that every table with a `tenant_id` column has RLS enabled + forced and a policy
+(`RLS_GAPS_SQL` from `core/tenancy` must return no rows after migrations).
 
 ## Tenant lifecycle
 `ACTIVE → SUSPENDED` (login blocked for members, data retained, platform admin only) `→ ACTIVE` or

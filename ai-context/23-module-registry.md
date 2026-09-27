@@ -63,7 +63,7 @@ equipment-rental → `EquipmentReturnDue`; machinery → `MachineServiceDue`.
 
 ## Adding a new module — checklist
 1. Write `ai-context/modules/<name>.md` (all sections of the template in `prompts/new-module.md`).
-2. Add a registry row + dependency line here; confirm no cycle.
+2. Add a registry row + dependency line here and in `MODULE_DEPS` in `/.dependency-cruiser.cjs`; confirm no cycle.
 3. Create an ADR if it introduces new infrastructure or changes the financial model.
 4. Scaffold folder per 03; Prisma schema file `apps/api/prisma/schema/<name>.prisma`; permissions file;
    contracts folder; web `features/<name>`.

@@ -9,15 +9,19 @@
   "scripts": {
     "dev": "pnpm --filter @repo/contracts build && pnpm --parallel --filter @repo/contracts --filter @repo/api --filter @repo/web dev",
     "build": "pnpm -r build",
-    "lint": "pnpm --filter @repo/contracts build && pnpm -r lint",
+    "lint": "pnpm --filter @repo/contracts build && pnpm -r lint && pnpm lint:deps",
+    "lint:deps": "depcruise apps/api/src apps/web/src packages/contracts/src --config .dependency-cruiser.cjs",
     "typecheck": "pnpm --filter @repo/contracts build && pnpm -r typecheck",
     "test": "pnpm --filter @repo/contracts build && pnpm -r test",
+    "test:int": "pnpm --filter @repo/api test:int",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "prettier": "@repo/config/prettier",
   "devDependencies": {
     "@repo/config": "workspace:*",
-    "prettier": "3.9.9"
+    "dependency-cruiser": "18.4.0",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3"
   }
 }

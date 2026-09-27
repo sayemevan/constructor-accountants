@@ -8,8 +8,8 @@ const CONNECTION_TIMEOUT_MS = 5_000;
 
 /**
  * The single Prisma client of the process, connected as the runtime role (`app_user`) through the `pg` driver
- * adapter. Repositories will receive the tenant-scoped extension of this client (roadmap step 7), never this raw
- * instance. Connects lazily on the first query.
+ * adapter. Repositories will receive `TenantDatabase` (core/tenancy) wrapping this client — wired in roadmap step 8 —
+ * never this raw instance. Connects lazily on the first query.
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy {

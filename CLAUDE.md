@@ -6,10 +6,17 @@ This file is always loaded. Keep it short. Detailed rules live in `ai-context/`.
 
 ## Repository status (update as phases complete)
 
-- **Current phase:** Phase 0 — steps 1–4 done (prototype in `legacy/`; pnpm monorepo; dev compose
+- **Current phase:** Phase 0 — done (steps 1–7) (prototype in `legacy/`; pnpm monorepo; dev compose
   `infrastructure/compose/dev.yml`; API skeleton in `apps/api/src/core/`: `config` (Zod env), `logging` (pino +
   requestId), `errors` (typed errors + global filter/envelope), `database` (Prisma 7 + pg adapter), `health`;
-  multi-file schema in `apps/api/prisma/schema/`; `cli.ts migrate`). No features yet. Next: roadmap step 5.
+  multi-file schema in `apps/api/prisma/schema/`; `cli.ts migrate`. Web skeleton in `apps/web`: Tailwind v4,
+  shadcn/ui (radix-nova, `components.json`), `lib/api-client.ts` + `ApiError`, TanStack Query provider,
+  `(app)` shell with sidebar/header/mobile bottom nav; `next dev` rewrites `/api/*` to the API). CI in
+  `.github/workflows/ci.yml` (format, lint + dependency-cruiser, typecheck, unit, build); boundary rules in
+  `.dependency-cruiser.cjs` (`MODULE_DEPS` mirrors `23-module-registry.md`). Step 7 tenancy spike done
+  (ADR-0005 "Spike outcome"): `apps/api/src/core/tenancy/` (`TenantContext`, `TenantDatabase`, `RLS_GAPS_SQL`),
+  Testcontainers harness `src/testing/postgres.ts`, test-only spike tables in `core/tenancy/__tests__/spike/`.
+  Not yet wired into Nest. No features yet. Next: Phase 1 step 8.
 - `legacy/`: **frozen Google-Sheets prototype ("BuildLedger")**, outside the pnpm workspace, excluded from
   build/lint/format. UX/domain reference only. Do NOT extend it, do NOT copy its data layer, do NOT treat its
   types as the schema. See `docs/adr/0016-legacy-prototype.md`.
@@ -47,7 +54,8 @@ Node 24 (`.nvmrc`), pnpm (version pinned in root `package.json` → `packageMana
 |---|---|
 | Install | `pnpm install` |
 | Dev (contracts watch + api :3001 + web :3000) | `pnpm dev` |
-| Lint (zero warnings) | `pnpm lint` |
+| Lint (zero warnings; includes module boundaries) | `pnpm lint` |
+| Module boundaries only (dependency-cruiser) | `pnpm lint:deps` |
 | Typecheck | `pnpm typecheck` |
 | Format / check formatting | `pnpm format` / `pnpm format:check` |
 | Build all | `pnpm build` |
@@ -56,8 +64,12 @@ Node 24 (`.nvmrc`), pnpm (version pinned in root `package.json` → `packageMana
 | Dev services (Postgres, RustFS S3, Mailpit) | `docker compose -f infrastructure/compose/dev.yml up -d` |
 | API env (first time) | `cp apps/api/.env.example apps/api/.env` |
 | Unit tests | `pnpm test` |
+| Integration tests (Docker; `*.int.test.ts`) | `pnpm test:int` |
+| Tenancy overhead measurement (not in CI) | `pnpm --filter @repo/api perf:tenancy` |
+| Add a shadcn/ui primitive | `cd apps/web && pnpm dlx shadcn@4.21.0 add <component>` |
 | Create a migration (dev) | `pnpm --filter @repo/api db:migrate:dev --name <name>` |
 | Apply migrations (built CLI) | `pnpm --filter @repo/api build && pnpm --filter @repo/api cli migrate` |
 
 Prisma client is generated into `apps/api/src/generated/` (gitignored) by build/lint/typecheck/dev.
-Not yet available: integration (Testcontainers) / e2e tests, `cli seed` — added in later steps.
+Not yet available: e2e tests, `cli seed` — added in later steps. If Testcontainers hangs pulling
+`testcontainers/ryuk` locally (Docker credential helper), set `TESTCONTAINERS_RYUK_DISABLED=true`.

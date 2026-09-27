@@ -27,3 +27,4 @@ coverage/
 
 # generated code
 apps/api/src/generated/
+apps/api/src/core/tenancy/__tests__/spike/generated/

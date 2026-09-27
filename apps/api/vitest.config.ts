@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     include: ['src/**/__tests__/**/*.test.ts'],
+    // Integration tests need Docker (Testcontainers) and run separately: vitest.int.config.ts.
+    exclude: ['**/node_modules/**', 'src/**/*.int.test.ts'],
     environment: 'node',
   },
 });

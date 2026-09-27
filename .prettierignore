@@ -9,3 +9,4 @@ dist/
 .next/
 next-env.d.ts
 apps/api/src/generated/
+apps/api/src/core/tenancy/__tests__/spike/generated/

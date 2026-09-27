@@ -1,0 +1,56 @@
+// Tenancy spike (roadmap step 7, ADR-0005) — TEST-ONLY schema. These tables never enter prisma/migrations;
+// spike.sql creates them inside the Testcontainers database. They stand in for any parent/child pair of
+// tenant-owned tables (e.g. parties → party_roles) and follow the real conventions in 05 §1 and 06.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "./generated"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Global table (no RLS) — stand-in for `tenants`.
+model SpikeTenant {
+  id   String @id @db.Uuid
+  name String
+
+  projects SpikeProject[]
+  notes    SpikeProjectNote[]
+
+  @@map("spike_tenants")
+}
+
+model SpikeProject {
+  id String @id @default(uuid(7)) @db.Uuid
+  /// DB default reads the transaction-local tenant, so callers never pass tenantId (06 rule 2).
+  tenantId String @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @map("tenant_id") @db.Uuid
+  name     String
+
+  tenant SpikeTenant        @relation(fields: [tenantId], references: [id])
+  notes  SpikeProjectNote[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, name])
+  @@map("spike_projects")
+}
+
+model SpikeProjectNote {
+  id        String @id @default(uuid(7)) @db.Uuid
+  tenantId  String @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @map("tenant_id") @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  body      String
+
+  tenant  SpikeTenant  @relation(fields: [tenantId], references: [id])
+  /// Composite FK: a note can only reference a project of its own tenant.
+  project SpikeProject @relation(fields: [tenantId, projectId], references: [tenantId, id])
+
+  @@unique([tenantId, id])
+  @@index([tenantId, projectId])
+  @@map("spike_project_notes")
+}

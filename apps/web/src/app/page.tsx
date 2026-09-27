@@ -1,9 +1,5 @@
-import type { ReactNode } from 'react';
+import { redirect } from 'next/navigation';
 
-export default function HomePage(): ReactNode {
-  return (
-    <main>
-      <h1>Construction ERP</h1>
-    </main>
-  );
+export default function HomePage(): never {
+  redirect('/dashboard');
 }
